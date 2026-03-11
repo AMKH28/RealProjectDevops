@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SNAKE // DevOps Edition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --green: #00ff41;
+      --green-dim: #00aa2a;
+      --green-dark: #003310;
+      --bg: #030d07;
+      --grid: #0a1f0f;
+      --accent: #00ff41;
+      --red: #ff2244;
+      --yellow: #ffdd00;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Scanline effect */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    /* CRT flicker */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    .container {
+      display: flex;
+      gap: 32px;
+      align-items: flex-start;
+      padding: 20px;
+    }
+
+    /* HEADER */
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-family: 'Orbitron', monospace;
+      font-size: 2.8rem;
+      font-weight: 900;
+      letter-spacing: 0.3em;
+      color: var(--green);
+      text-shadow:
+        0 0 10px var(--green),
+        0 0 30px var(--green),
+        0 0 60px var(--green-dim);
+      animation: flicker 4s infinite;
+    }
+
+    .subtitle {
+      font-size: 0.75rem;
+      color: var(--green-dim);
+      letter-spacing: 0.4em;
+      margin-top: 4px;
+    }
+
+    @keyframes flicker {
+      0%, 95%, 100% { opacity: 1; }
+      96% { opacity: 0.7; }
+      97% { opacity: 1; }
+      98% { opacity: 0.5; }
+      99% { opacity: 1; }
+    }
+
+    /* GAME PANEL */
+    .game-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* CANVAS */
+    .canvas-wrapper {
+      position: relative;
+      border: 2px solid var(--green-dim);
+      box-shadow:
+        0 0 0 1px var(--green-dark),
+        0 0 20px rgba(0,255,65,0.2),
+        0 0 60px rgba(0,255,65,0.05),
+        inset 0 0 30px rgba(0,255,65,0.03);
+    }
+
+    canvas {
+      display: block;
+      background: var(--grid);
+      image-rendering: pixelated;
+    }
+
+    /* Corner decorations */
+    .canvas-wrapper::before,
+    .canvas-wrapper::after {
+      content: '▸';
+      position: absolute;
+      color: var(--green);
+      font-size: 10px;
+      opacity: 0.5;
+    }
+    .canvas-wrapper::before { top: 4px; left: 4px; }
+    .canvas-wrapper::after  { bottom: 4px; right: 4px; transform: rotate(180deg); }
+
+    /* OVERLAY (Start/Game Over) */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(3, 13, 7, 0.88);
+      gap: 16px;
+      transition: opacity 0.3s;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .overlay-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.6rem;
+      font-weight: 900;
+      text-shadow: 0 0 20px var(--green);
+      letter-spacing: 0.2em;
+    }
+    .overlay-title.dead { color: var(--red); text-shadow: 0 0 20px var(--red); }
+
+    .overlay-score {
+      font-size: 1rem;
+      color: var(--green-dim);
+      letter-spacing: 0.2em;
+    }
+
+    .name-input-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .name-input-group label {
+      font-size: 0.7rem;
+      color: var(--green-dim);
+      letter-spacing: 0.3em;
+    }
+
+    input[type="text"] {
+      background: transparent;
+      border: 1px solid var(--green-dim);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      padding: 6px 12px;
+      text-align: center;
+      outline: none;
+      letter-spacing: 0.2em;
+      width: 180px;
+    }
+    input[type="text"]:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 10px rgba(0,255,65,0.3);
+    }
+
+    .btn {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      padding: 10px 28px;
+      border: 2px solid var(--green);
+      background: transparent;
+      color: var(--green);
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.15s;
+      box-shadow: 0 0 10px rgba(0,255,65,0.2);
+    }
+    .btn:hover {
+      background: var(--green);
+      color: var(--bg);
+      box-shadow: 0 0 20px rgba(0,255,65,0.5);
+    }
+    .btn:active { transform: scale(0.97); }
+
+    .hint {
+      font-size: 0.65rem;
+      color: var(--green-dark);
+      letter-spacing: 0.2em;
+    }
+
+    /* STATS BAR */
+    .stats-bar {
+      display: flex;
+      gap: 32px;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      color: var(--green-dim);
+      width: 100%;
+      justify-content: space-between;
+      padding: 0 4px;
+    }
+
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-label { font-size: 0.6rem; color: var(--green-dark); }
+    .stat-value { color: var(--green); font-size: 0.9rem; }
+
+    /* SIDE PANEL */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 200px;
+    }
+
+    .panel-box {
+      border: 1px solid var(--green-dark);
+      padding: 16px;
+      position: relative;
+    }
+
+    .panel-box::before {
+      content: attr(data-title);
+      position: absolute;
+      top: -9px;
+      left: 12px;
+      background: var(--bg);
+      padding: 0 6px;
+      font-size: 0.65rem;
+      color: var(--green-dim);
+      letter-spacing: 0.3em;
+    }
+
+    /* CONTROLS */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 36px);
+      grid-template-rows: repeat(3, 36px);
+      gap: 4px;
+      justify-content: center;
+    }
+
+    .key {
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--green-dark);
+      font-size: 0.7rem;
+      color: var(--green-dim);
+      transition: all 0.1s;
+    }
+    .key.active-key {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(0,255,65,0.08);
+      box-shadow: 0 0 8px rgba(0,255,65,0.3);
+    }
+    .key.empty { border: none; }
+
+    /* HIGHSCORES */
+    .score-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.72rem;
+    }
+
+    .score-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--green-dark);
+      color: var(--green-dim);
+    }
+    .score-item:first-child { color: var(--yellow); }
+    .score-item:nth-child(2) { color: #aaa; }
+    .score-item:nth-child(3) { color: #cd7f32; }
+
+    .score-rank { width: 20px; color: var(--green-dark); }
+    .score-name { flex: 1; padding: 0 6px; }
+    .score-val { color: var(--green); }
+
+    .no-scores {
+      font-size: 0.65rem;
+      color: var(--green-dark);
+      text-align: center;
+      padding: 8px 0;
+      letter-spacing: 0.2em;
+    }
+
+    /* API STATUS */
+    .api-status {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.68rem;
+    }
+
+    .api-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--green-dim);
+    }
+
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green-dim);
+    }
+    .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+    .dot.offline { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* SPEED SELECTOR */
+    .speed-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .speed-btn {
+      flex: 1;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      padding: 5px 4px;
+      border: 1px solid var(--green-dark);
+      background: transparent;
+      color: var(--green-dim);
+      cursor: pointer;
+      letter-spacing: 0.1em;
+      transition: all 0.15s;
+    }
+    .speed-btn.active, .speed-btn:hover {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(0,255,65,0.05);
+    }
+
+    @media (max-width: 700px) {
+      .container { flex-direction: column; align-items: center; }
+      .side-panel { flex-direction: row; flex-wrap: wrap; min-width: unset; width: 100%; }
+      .panel-box { flex: 1; min-width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title">SNAKE</div>
+  <div class="subtitle">// DEVOPS EDITION //</div>
+</header>
+
+<div class="container">
+
+  <!-- GAME PANEL -->
+  <div class="game-panel">
+    <div class="stats-bar">
+      <div class="stat">
+        <span class="stat-label">SCORE</span>
+        <span class="stat-value" id="score">000</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">BEST</span>
+        <span class="stat-value" id="best">000</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">LENGTH</span>
+        <span class="stat-value" id="length">001</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">LEVEL</span>
+        <span class="stat-value" id="level">01</span>
+      </div>
+    </div>
+
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="overlay-title" id="overlayTitle">SNAKE</div>
+        <div class="overlay-score" id="overlayScore">// DEVOPS EDITION //</div>
+        <div class="name-input-group" id="nameGroup" style="display:none">
+          <label>ENTER YOUR NAME</label>
+          <input type="text" id="playerName" maxlength="12" placeholder="PLAYER_01" autocomplete="off"/>
+        </div>
+        <button class="btn" id="mainBtn" onclick="handleMainBtn()">BOOT SYSTEM</button>
+        <div class="hint" id="overlayHint">USE ARROW KEYS OR WASD</div>
+      </div>
+    </div>
+
+    <!-- Speed selector -->
+    <div style="display:flex; gap:8px; align-items:center; font-size:0.65rem; color:var(--green-dark); letter-spacing:0.2em;">
+      SPEED:
+      <div class="speed-btns">
+        <button class="speed-btn" onclick="setSpeed(1)">SLOW</button>
+        <button class="speed-btn active" onclick="setSpeed(2)">NORM</button>
+        <button class="speed-btn" onclick="setSpeed(3)">FAST</button>
+        <button class="speed-btn" onclick="setSpeed(4)">TURBO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+
+    <!-- Controls -->
+    <div class="panel-box" data-title="CONTROLS">
+      <div class="controls-grid">
+        <div class="key empty"></div>
+        <div class="key" id="key-up">▲</div>
+        <div class="key empty"></div>
+        <div class="key" id="key-left">◀</div>
+        <div class="key" id="key-down">▼</div>
+        <div class="key" id="key-right">▶</div>
+        <div class="key empty"></div>
+        <div class="key empty"></div>
+        <div class="key empty"></div>
+      </div>
+      <div style="margin-top:12px; font-size:0.62rem; color:var(--green-dark); text-align:center; letter-spacing:0.15em;">
+        WASD OR ARROW KEYS<br/>P = PAUSE
+      </div>
+    </div>
+
+    <!-- API Status -->
+    <div class="panel-box" data-title="API STATUS">
+      <div class="api-status">
+        <div class="api-row"><div class="dot" id="dot-health"></div><span id="status-health">GET /health</span></div>
+        <div class="api-row"><div class="dot" id="dot-scores"></div><span id="status-scores">GET /api/highscores</span></div>
+        <div class="api-row"><div class="dot" id="dot-info"></div><span id="status-info">GET /api/info</span></div>
+      </div>
+      <div style="margin-top:10px; font-size:0.6rem; color:var(--green-dark); letter-spacing:0.1em;" id="appVersion">v1.0.0</div>
+    </div>
+
+    <!-- Highscores -->
+    <div class="panel-box" data-title="HIGHSCORES">
+      <div class="score-list" id="scoreList">
+        <div class="no-scores">// NO DATA YET //</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const GRID = 20;
+const COLS = canvas.width / GRID;
+const ROWS = canvas.height / GRID;
+
+const SPEEDS = [0, 180, 120, 80, 50];
+let speedLevel = 2;
+let INTERVAL = SPEEDS[speedLevel];
+
+// Colors
+const C = {
+  bg:       '#030d07',
+  grid:     '#0a1500',
+  snake:    '#00ff41',
+  snakeDim: '#00aa2a',
+  snakeEye: '#030d07',
+  food:     '#ff2244',
+  foodGlow: 'rgba(255,34,68,0.4)',
+  special:  '#ffdd00',
+};
+
+let snake, dir, nextDir, food, score, best, gameLoop, running, paused, level, foodCount;
+
+function initGame() {
+  snake = [
+    {x: 10, y: 10},
+    {x: 9,  y: 10},
+    {x: 8,  y: 10},
+  ];
+  dir = {x: 1, y: 0};
+  nextDir = {x: 1, y: 0};
+  score = 0;
+  level = 1;
+  foodCount = 0;
+  best = parseInt(localStorage.getItem('snakeBest') || '0');
+  spawnFood();
+  updateStats();
+}
+
+function spawnFood() {
+  let pos;
+  do {
+    pos = {
+      x: Math.floor(Math.random() * COLS),
+      y: Math.floor(Math.random() * ROWS),
+      special: Math.random() < 0.15  // 15% chance golden food
+    };
+  } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+  food = pos;
+}
+
+function update() {
+  if (paused) return;
+  dir = {...nextDir};
+
+  const head = {
+    x: (snake[0].x + dir.x + COLS) % COLS,
+    y: (snake[0].y + dir.y + ROWS) % ROWS,
+  };
+
+  // Self collision
+  if (snake.some(s => s.x === head.x && s.y === head.y)) {
+    gameOver();
+    return;
+  }
+
+  snake.unshift(head);
+
+  if (head.x === food.x && head.y === food.y) {
+    const pts = food.special ? 50 : 10;
+    score += pts * level;
+    foodCount++;
+    if (foodCount % 5 === 0) {
+      level++;
+      INTERVAL = Math.max(40, SPEEDS[speedLevel] - (level - 1) * 8);
+      restartLoop();
+    }
+    if (score > best) {
+      best = score;
+      localStorage.setItem('snakeBest', best);
+    }
+    spawnFood();
+    updateStats();
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function draw() {
+  // Clear
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid dots
+  ctx.fillStyle = 'rgba(0,255,65,0.04)';
+  for (let x = 0; x < COLS; x++) {
+    for (let y = 0; y < ROWS; y++) {
+      ctx.fillRect(x * GRID + GRID/2 - 1, y * GRID + GRID/2 - 1, 2, 2);
+    }
+  }
+
+  // Food glow
+  const glowColor = food.special ? 'rgba(255,221,0,0.3)' : C.foodGlow;
+  const grad = ctx.createRadialGradient(
+    food.x * GRID + GRID/2, food.y * GRID + GRID/2, 2,
+    food.x * GRID + GRID/2, food.y * GRID + GRID/2, GRID * 1.5
+  );
+  grad.addColorStop(0, glowColor);
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect((food.x - 1) * GRID, (food.y - 1) * GRID, GRID * 3, GRID * 3);
+
+  // Food
+  ctx.fillStyle = food.special ? C.special : C.food;
+  const fp = 3;
+  ctx.fillRect(food.x * GRID + fp, food.y * GRID + fp, GRID - fp*2, GRID - fp*2);
+
+  // Food inner
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(food.x * GRID + fp + 2, food.y * GRID + fp + 2, 4, 4);
+
+  // Snake
+  snake.forEach((seg, i) => {
+    const isHead = i === 0;
+    const t = i / snake.length;
+    const alpha = 1 - t * 0.5;
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = isHead ? C.snake : C.snakeDim;
+
+    const p = isHead ? 1 : 2;
+    ctx.fillRect(seg.x * GRID + p, seg.y * GRID + p, GRID - p*2, GRID - p*2);
+
+    // Head details
+    if (isHead) {
+      ctx.globalAlpha = 1;
+      // Eyes
+      ctx.fillStyle = C.snakeEye;
+      const ex = dir.x === 0 ? [-3, 3] : [dir.x > 0 ? 4 : -6, dir.x > 0 ? 4 : -6];
+      const ey = dir.y === 0 ? [-3, 3] : [dir.y > 0 ? 4 : -6, dir.y > 0 ? 4 : -6];
+      const cx = seg.x * GRID + GRID/2;
+      const cy = seg.y * GRID + GRID/2;
+
+      if (dir.x !== 0) {
+        ctx.fillRect(cx + (dir.x > 0 ? 2 : -5), cy - 4, 3, 3);
+        ctx.fillRect(cx + (dir.x > 0 ? 2 : -5), cy + 2, 3, 3);
+      } else {
+        ctx.fillRect(cx - 4, cy + (dir.y > 0 ? 2 : -5), 3, 3);
+        ctx.fillRect(cx + 2,  cy + (dir.y > 0 ? 2 : -5), 3, 3);
+      }
+
+      // Glow on head
+      const hGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, GRID);
+      hGrad.addColorStop(0, 'rgba(0,255,65,0.15)');
+      hGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = hGrad;
+      ctx.fillRect(seg.x * GRID - GRID/2, seg.y * GRID - GRID/2, GRID*2, GRID*2);
+    }
+  });
+
+  ctx.globalAlpha = 1;
+}
+
+function gameOver() {
+  clearInterval(gameLoop);
+  running = false;
+
+  const overlay = document.getElementById('overlay');
+  const title = document.getElementById('overlayTitle');
+  const scoreEl = document.getElementById('overlayScore');
+  const nameGroup = document.getElementById('nameGroup');
+  const btn = document.getElementById('mainBtn');
+  const hint = document.getElementById('overlayHint');
+
+  title.textContent = 'GAME OVER';
+  title.className = 'overlay-title dead';
+  scoreEl.textContent = `SCORE: ${score} // BEST: ${best}`;
+  nameGroup.style.display = 'flex';
+  btn.textContent = 'SAVE & RETRY';
+  hint.textContent = '';
+  overlay.classList.remove('hidden');
+}
+
+function handleMainBtn() {
+  const overlay = document.getElementById('overlay');
+  const nameGroup = document.getElementById('nameGroup');
+
+  if (nameGroup.style.display !== 'none') {
+    // Save score
+    const name = document.getElementById('playerName').value.trim() || 'ANON';
+    if (score > 0) saveScore(name, score);
+  }
+
+  // Reset overlay
+  document.getElementById('overlayTitle').className = 'overlay-title';
+  document.getElementById('overlayTitle').textContent = 'READY';
+  document.getElementById('overlayScore').textContent = `BEST: ${best}`;
+  nameGroup.style.display = 'none';
+  document.getElementById('mainBtn').textContent = 'START';
+  document.getElementById('overlayHint').textContent = 'USE ARROW KEYS OR WASD';
+
+  startGame();
+}
+
+function startGame() {
+  initGame();
+  draw();
+  document.getElementById('overlay').classList.add('hidden');
+  running = true;
+  paused = false;
+  INTERVAL = SPEEDS[speedLevel];
+  gameLoop = setInterval(update, INTERVAL);
+}
+
+function restartLoop() {
+  clearInterval(gameLoop);
+  gameLoop = setInterval(update, INTERVAL);
+}
+
+function setSpeed(s) {
+  speedLevel = s;
+  INTERVAL = SPEEDS[s];
+  document.querySelectorAll('.speed-btn').forEach((b, i) => {
+    b.classList.toggle('active', i + 1 === s);
+  });
+  if (running && !paused) restartLoop();
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  const map = {
+    ArrowUp: {x:0,y:-1}, ArrowDown: {x:0,y:1},
+    ArrowLeft: {x:-1,y:0}, ArrowRight: {x:1,y:0},
+    w: {x:0,y:-1}, s: {x:0,y:1}, a: {x:-1,y:0}, d: {x:1,y:0},
+    W: {x:0,y:-1}, S: {x:0,y:1}, A: {x:-1,y:0}, D: {x:1,y:0},
+  };
+  const keyVisual = {
+    ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+    w:'up', s:'down', a:'left', d:'right',
+    W:'up', S:'down', A:'left', D:'right',
+  };
+
+  if (map[e.key]) {
+    e.preventDefault();
+    const nd = map[e.key];
+    if (nd.x !== -dir.x || nd.y !== -dir.y) nextDir = nd;
+    const kId = 'key-' + keyVisual[e.key];
+    const kEl = document.getElementById(kId);
+    if (kEl) {
+      kEl.classList.add('active-key');
+      setTimeout(() => kEl.classList.remove('active-key'), 150);
+    }
+  }
+
+  if (e.key === 'p' || e.key === 'P') {
+    if (!running) return;
+    paused = !paused;
+  }
+});
+
+function updateStats() {
+  document.getElementById('score').textContent = String(score).padStart(3,'0');
+  document.getElementById('best').textContent = String(best).padStart(3,'0');
+  document.getElementById('length').textContent = String(snake.length).padStart(3,'0');
+  document.getElementById('level').textContent = String(level).padStart(2,'0');
+}
+
+// API calls
+async function saveScore(name, sc) {
+  try {
+    await fetch(`/api/highscores/${encodeURIComponent(name)}/${sc}`, {method:'POST'});
+    loadHighscores();
+  } catch(e) {}
+}
+
+async function loadHighscores() {
+  try {
+    const r = await fetch('/api/highscores');
+    const data = await r.json();
+    const list = document.getElementById('scoreList');
+    if (!data.length) {
+      list.innerHTML = '<div class="no-scores">// NO DATA YET //</div>';
+      return;
+    }
+    list.innerHTML = data.map((s, i) =>
+      `<div class="score-item">
+        <span class="score-rank">${i+1}.</span>
+        <span class="score-name">${s.name}</span>
+        <span class="score-val">${s.score}</span>
+      </div>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function checkApiStatus() {
+  const endpoints = [
+    { id: 'health', url: '/health' },
+    { id: 'scores', url: '/api/highscores' },
+    { id: 'info',   url: '/api/info' },
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(ep.url);
+      const dot = document.getElementById('dot-' + ep.id);
+      dot.className = r.ok ? 'dot online' : 'dot offline';
+
+      if (ep.id === 'info' && r.ok) {
+        const d = await r.json();
+        document.getElementById('appVersion').textContent =
+          `v${d.version} // ENV: ${d.environment}`;
+      }
+    } catch(e) {
+      document.getElementById('dot-' + ep.id).className = 'dot offline';
+    }
+  }
+}
+
+// Init
+initGame();
+draw();
+loadHighscores();
+checkApiStatus();
+setInterval(checkApiStatus, 10000);
+setInterval(loadHighscores, 15000);
+</script>
+</body>
+</html>
